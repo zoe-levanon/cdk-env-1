@@ -1,0 +1,7 @@
+Things to add:
+
+1. Roles and permissions
+2. Use session manager instead of accessing via SSH in a public IP, or at least limit the access to port 22 to specific IPs
+3. Add tags to each resource, so that it's easier to manage them and track their cost
+4. Use a separate security group for the EC2 machines (prevents access to port 80/8080) and the LB (prevents access to port 22).
+    Make sure you approve access to port 8080 on the EC2 security group from the LB security group.
