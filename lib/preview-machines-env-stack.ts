@@ -7,7 +7,7 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
-        // Create a VPC with multiple
+        // Create a VPC with multiple subnets spread across two AZs (availability zones)
         const vpc = new ec2.Vpc(this, 'MainVPC', {
             vpcName: 'MainVPC',
             maxAzs: 2,
@@ -20,6 +20,7 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
             ]
         });
 
+        // Create a security group that will allow access only to specific ports.
         const sg1 = new ec2.SecurityGroup(this, 'SecurityGroup-preview-machines', {
             vpc: vpc
         });
@@ -27,6 +28,7 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
         // However, access is still limited only to people that have the private key
         sg1.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'allow ssh access from the world');
 
+        // Create used data - this is a script that's executed after every EC2 instance is created, and initializes it with customized data.
         const userData = ec2.UserData.forLinux();
         // These lines will install the SSM agent on the instance, however, to use it we still need to define an IAM role and profile, which is not yet done
         userData.addCommands('sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm');
@@ -44,40 +46,12 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
         // Install node 18
         userData.addCommands(`curl --silent --location https://rpm.nodesource.com/setup_18.x | sudo bash - && dnf -y install nodejs-18.16.1`);
 
-
-        // Create Role
-     /*   const role = new iam.Role(this, 'example-iam-role', {
-            assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-            description: 'An example IAM role in AWS CDK',
-            managedPolicies: [
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonAPIGatewayInvokeFullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMFullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2FullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AutoScalingFullAccess'),
-                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonVPCFullAccess'),
-            ],
-        });*/
-/*
-
-        // Create an IAM role that allows access to Session Manager.
-        const sessionManagerRole = new iam.Role(this, 'SessionManagerRole', {
-            assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-            permissions: [
-                new iam.PolicyStatement({
-                    actions: ['ssm:StartSession'],
-                    resources: ['*'],
-                }),
-            ],
-        });
-*/
-/*
-
-// Create an IAM instance profile that uses the SessionManagerRole.
-        const instanceProfile = new iam.InstanceProfile(app, 'InstanceProfile', {
-            role: sessionManagerRole,
-        });
-*/
+        // Add commands here to install the software you need on the machine (for example, download a file from
+        /*userData.addCommands(`mkdir /myprodudct`);
+        userData.addCommands(`cd /myprodudct`);
+        userData.addCommands(`aws s3 cp s3://some-bucket/myprodudct.tar.gz .`);
+        userData.addCommands(`tar xvf my-package.tar.gz`);
+        userData.addCommands(`node /myproduct/server.js`);*/
 
 
         // Create the LaunchTemplate (this is used when launching a new EC2 instance)
@@ -128,7 +102,7 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
 
         autoScalingGroup.attachToApplicationTargetGroup(targetGroup);
 
-        // Setup auto-scaling schedule
+        // Setup auto-scaling schedule - shut down the machine at 19:00 UTC, and start it up at 6:00 UTC
         autoScalingGroup.scaleOnSchedule('ScaleDown', {
             schedule: asg.Schedule.cron({ hour: '19', minute: '0' }),
             minCapacity: 0
