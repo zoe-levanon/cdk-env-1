@@ -8,6 +8,10 @@ This stack contains a suite of services:
 - asg - an Auto Scaling Group to start/stop your EC2 instances
 - load balancer - to direct traffic to the EC2 instances
 
+## Project Structure
+- `lib` - contains the CDK stack definition (this is the main part, with all the code defining the ASG, Launch template, etc.)
+- `bin` - contains the entry point for the CDK app
+- `cdk.json` - contains configuration for the CDK app (i.e., which app to deploy when you run `cdk deploy`, etc.)
 ## Getting started
 - Clone the repo
 - Run `npm install`
