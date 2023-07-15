@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/cdk-app-env.ts",
+  "app": "npx ts-node --prefer-ts-exts bin/preview-machines-app-env.ts",
   "watch": {
     "include": [
       "**"

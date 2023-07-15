@@ -2,7 +2,7 @@
   "name": "cdk-app-env",
   "version": "0.1.0",
   "bin": {
-    "cdk-app-env": "bin/cdk-app-env.js"
+    "cdk-preview-machines-env": "bin/preview-machines-app-env.js"
   },
   "scripts": {
     "build": "tsc",

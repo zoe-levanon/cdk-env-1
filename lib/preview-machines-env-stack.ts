@@ -1,47 +1,96 @@
 import * as cdk from 'aws-cdk-lib';
 import { aws_autoscaling as asg, aws_ec2 as ec2, aws_elasticloadbalancingv2 as elbv2 } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { InstanceClass, InstanceSize, InstanceType } from "aws-cdk-lib/aws-ec2";
+import { AmazonLinuxCpuType, BlockDeviceVolume, InstanceClass, InstanceSize, InstanceType } from "aws-cdk-lib/aws-ec2";
 
-/*
-const initScript = `
-          #!/bin/bash
-          # Install SSM agent (for easier access via AWS Session Manager)
-          yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
-          sudo systemctl enable amazon-ssm-agent
-          sudo systemctl start amazon-ssm-agent          
-          yum install -y epel-release
-          
-          # Install ffmpeg
-          yum install -y ffmpeg
-        `;*/
-
-export class CdkAppEnvStack extends cdk.Stack {
+export class PreviewMachinesEnvStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         // Create a VPC with multiple
         const vpc = new ec2.Vpc(this, 'MainVPC', {
-            maxAzs: 6
+            vpcName: 'MainVPC',
+            maxAzs: 2,
+            subnetConfiguration: [
+                {
+                    name: 'public-subnet',
+                    subnetType: ec2.SubnetType.PUBLIC,
+                    mapPublicIpOnLaunch: true
+                }
+            ]
         });
 
         const sg1 = new ec2.SecurityGroup(this, 'SecurityGroup-preview-machines', {
-            vpc: vpc,
+            vpc: vpc
         });
+        // Note - this is, of course, very unsafe. We should limit the access to the IP of the office once you have a fixed IP.
+        // However, access is still limited only to people that have the private key
+        sg1.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'allow ssh access from the world');
+
+        const userData = ec2.UserData.forLinux();
+        // These lines will install the SSM agent on the instance, however, to use it we still need to define an IAM role and profile, which is not yet done
+        userData.addCommands('sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm');
+        userData.addCommands('sudo systemctl enable amazon-ssm-agent');
+        userData.addCommands('sudo systemctl start amazon-ssm-agent');
+        userData.addCommands('yum install -y epel-release');
+
+        // Install ffmpeg
+        userData.addCommands('cd /tmp/');
+        userData.addCommands('wget -O ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-arm64-static.tar.xz');
+        userData.addCommands('tar xvf ffmpeg.tar.xz');
+        userData.addCommands('/bin/cp -f */ffmpeg /usr/bin/');
+        userData.addCommands('/bin/cp -f */ffprobe /usr/bin/');
+
+        // Install node 18
+        userData.addCommands(`curl --silent --location https://rpm.nodesource.com/setup_18.x | sudo bash - && dnf -y install nodejs-18.16.1`);
 
 
-        const multipartUserData = new ec2.MultipartUserData();
-        const commandsUserData = ec2.UserData.forLinux();
-        multipartUserData.addUserDataPart(commandsUserData, ec2.MultipartBody.SHELL_SCRIPT, true);
-        multipartUserData.addCommands('yum install -y ffmpeg');
+        // Create Role
+     /*   const role = new iam.Role(this, 'example-iam-role', {
+            assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+            description: 'An example IAM role in AWS CDK',
+            managedPolicies: [
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonAPIGatewayInvokeFullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMFullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEC2FullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3FullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AutoScalingFullAccess'),
+                iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonVPCFullAccess'),
+            ],
+        });*/
+/*
+
+        // Create an IAM role that allows access to Session Manager.
+        const sessionManagerRole = new iam.Role(this, 'SessionManagerRole', {
+            assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+            permissions: [
+                new iam.PolicyStatement({
+                    actions: ['ssm:StartSession'],
+                    resources: ['*'],
+                }),
+            ],
+        });
+*/
+/*
+
+// Create an IAM instance profile that uses the SessionManagerRole.
+        const instanceProfile = new iam.InstanceProfile(app, 'InstanceProfile', {
+            role: sessionManagerRole,
+        });
+*/
+
 
         // Create the LaunchTemplate (this is used when launching a new EC2 instance)
         const lt = new ec2.LaunchTemplate(this, 'LaunchTemplate-PreviewMachines', {
             launchTemplateName: 'LaunchTemplate-PreviewMachines',
-            machineImage: new ec2.AmazonLinux2023ImageSsmParameter(),
+            machineImage: new ec2.AmazonLinux2023ImageSsmParameter({ cpuType: AmazonLinuxCpuType.ARM_64 }),
             // Instance type - notice that this is a Graviton2 instance type, so when we install software, it has to match the ARM architecture, and not intel
             instanceType: InstanceType.of(InstanceClass.C7G, InstanceSize.LARGE),
-            userData: multipartUserData
+            userData: userData,
+            securityGroup: sg1,
+            blockDevices: [{ deviceName: "/dev/xvda", volume: BlockDeviceVolume.ebs(40) }],
+            // role: role,
+            keyName: process.env.CDK_EC2_KEY_PAIR_NAME
         });
 
         // Create the load balancer in the VPC, with access to the web.
@@ -69,8 +118,9 @@ export class CdkAppEnvStack extends cdk.Stack {
         });
 
 
-        // Create an auto scaling group, and attach it to the load balancer's target group.
+        // Create an auto-scaling group, and attach it to the load balancer's target group.
         const autoScalingGroup = new asg.AutoScalingGroup(this, 'ASG-PreviewMachines', {
+            autoScalingGroupName: 'ASG-PreviewMachines',
             vpc,
             desiredCapacity: 1,
             launchTemplate: lt
