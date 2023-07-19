@@ -91,6 +91,8 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
             targetGroups: [targetGroup]
         });
 
+        // Add tags.
+
 
         // Create an auto-scaling group, and attach it to the load balancer's target group.
         const autoScalingGroup = new asg.AutoScalingGroup(this, 'ASG-PreviewMachines', {
@@ -101,16 +103,16 @@ export class PreviewMachinesEnvStack extends cdk.Stack {
         });
 
         autoScalingGroup.attachToApplicationTargetGroup(targetGroup);
-
-        // Setup auto-scaling schedule - shut down the machine at 19:00 UTC, and start it up at 6:00 UTC
-        autoScalingGroup.scaleOnSchedule('ScaleDown', {
-            schedule: asg.Schedule.cron({ hour: '19', minute: '0' }),
-            minCapacity: 0
-        });
-
-        autoScalingGroup.scaleOnSchedule('ScaleUp', {
-            schedule: asg.Schedule.cron({ hour: '6', minute: '0' }),
-            minCapacity: 1
-        });
+        //
+        // // Setup auto-scaling schedule - shut down the machine at 19:00 UTC, and start it up at 6:00 UTC
+        // autoScalingGroup.scaleOnSchedule('ScaleDown', {
+        //     schedule: asg.Schedule.cron({ hour: '19', minute: '0' }),
+        //     desiredCapacity: 0
+        // });
+        //
+        // autoScalingGroup.scaleOnSchedule('ScaleUp', {
+        //     schedule: asg.Schedule.cron({ hour: '6', minute: '0' }),
+        //     desiredCapacity: 1
+        // });
     }
 }
